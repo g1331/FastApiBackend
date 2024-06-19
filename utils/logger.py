@@ -1,13 +1,33 @@
-# loggers.py
+import logging
+import sys
+
 from loguru import logger
 
 
-class SystemLogger:
+# 定义 FastAPI 的日志处理器，将其输出重定向到 Loguru
+class LoguruHandler(logging.Handler):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # 配置 Loguru
+        logger.add(sys.stdout, format="{time} {level} {message}", filter="my_module", level="INFO")
+
+    def emit(self, record):
+        try:
+            level = logger.level(record.levelname).name
+        except KeyError:
+            level = record.levelno
+        logger.log(level, record.getMessage())
+
+
+class SystemLogger(logging.Handler):
     APILogger = "API"
     DbLogger = "Database"
     AuthLogger = "Authentication"
     UserAction = "UserAction"
     SystemAction = "SystemAction"
+    Mail = "Mail"
 
     @staticmethod
     def info(logger_name, message):

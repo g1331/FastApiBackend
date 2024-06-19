@@ -1,7 +1,7 @@
 [project]
 name = "FastApiBackend"
 version = "0.1.0"
-description = "Default template for PDM package"
+description = "FastApiBackend is a backend project based on FastAPI."
 authors = [
     {name = "g1331", email = "1257661006@qq.com"},
 ]
@@ -15,6 +15,10 @@ dependencies = [
     "pycryptodome>=3.20.0",
     "python-jose>=3.3.0",
     "bcrypt==4.0.1",
+    "fastapi-mail>=1.4.1",
+    "itsdangerous>=2.2.0",
+    "captcha>=0.5.0",
+    "pytest>=8.2.2",
 ]
 requires-python = "==3.10.*"
 readme = "README.md"

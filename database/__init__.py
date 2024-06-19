@@ -1,3 +1,4 @@
+import os
 from asyncio import Lock
 
 from loguru import logger
@@ -9,12 +10,12 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 class AsyncORM:
     """对象关系映射（Object Relational Mapping）"""
 
-    def __init__(self, db_link: str, db_mutex: Lock or None = None):
+    def __init__(self, _db_link: str, db_mutex: Lock or None = None):
         """
         AsyncORM类可以支持多种数据库，只需要将不同的数据库链接字符串传入db_link函数即可。
-        :param db_link: 数据库链接
+        :param _db_link: 数据库链接
         """
-        self.db_link = db_link
+        self.db_link = _db_link
         """
         创建异步数据库引擎
         echo参数是SQLAlchemy引擎的一个布尔值选项，表示是否在引擎创建时打印所有SQL语句。
@@ -23,7 +24,7 @@ class AsyncORM:
         所以，在生产环境中，建议将echo设为False，以关闭SQL语句输出。
         """
         try:
-            self.engine = create_async_engine(db_link, echo=False)
+            self.engine = create_async_engine(_db_link, echo=False)
         except Exception as e:
             logger.error(f"连接数据库失败: {e}")
             raise e
@@ -43,7 +44,7 @@ class AsyncORM:
         创建一个Session的工厂，使用这个工厂创建的Session对象与数据库连接关联。
         可以通过这个Session对象来执行SQL操作，如查询、插入、更新等。
         """
-        self.async_session = sessionmaker(bind=self.engine, class_=AsyncSession, expire_on_commit=False)
+        self.async_session = sessionmaker(bind=self.engine, class_=AsyncSession, expire_on_commit=False)  # type: ignore
         """
         Lock
         """
@@ -186,7 +187,11 @@ class AsyncORM:
         :param conditions_list: 条件列表，每个元素是一个tuple或list，表示该记录的条件
         """
         # 构造所有的update语句
-        update_stmts = [update(table).where(*condition).values(**data) for data, condition in zip(data_list, conditions_list)]
+        update_stmts = [
+            update(table).where(*condition).values(**data)
+            for data, condition in
+            zip(data_list, conditions_list)
+        ]
         # 执行批量更新操作
         await self.execute_all(update_stmts)
 
@@ -256,7 +261,7 @@ class AsyncORM:
     async def init_check(self):
         for table in self.Base.__subclasses__():
             if not await self.table_exists(table.__tablename__):
-                table.__table__.create(self.engine)
+                table.__table__.create(self.engine)  # type: ignore
         return None
 
     @staticmethod
@@ -279,7 +284,7 @@ class AsyncORM:
             _ = await conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
 
     @staticmethod
-    def get_sync_db_link(db_link):
+    def get_sync_db_link(_db_link):
         """将异步数据库链接转换为同步链接"""
 
         # 异步驱动到同步驱动的映射
@@ -292,12 +297,12 @@ class AsyncORM:
         }
 
         for async_driver, sync_driver in async_to_sync_drivers.items():
-            if async_driver in db_link:
-                return db_link.replace(async_driver, sync_driver)
+            if async_driver in _db_link:
+                return _db_link.replace(async_driver, sync_driver)
 
-        return db_link  # 如果不匹配任何异步驱动，返回原始链接
+        return _db_link  # 如果不匹配任何异步驱动，返回原始链接
 
 
 # 初始化 ORM 实例
-db_link = "sqlite+aiosqlite:///./test.db"
+db_link = f"sqlite+aiosqlite:///./{os.getenv('DB_NAME')}.db"
 orm = AsyncORM(db_link)

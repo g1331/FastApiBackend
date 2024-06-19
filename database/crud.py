@@ -5,9 +5,12 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 
 from database import orm
-from models import User
+from database.models.user import User
 from schemas import UserCreate, UserUpdate
-from utils import get_password_hash, verify_password
+from utils.token import get_password_hash, verify_password
+
+# CRUD是指在做计算处理时的增加(Create)、读取查询(Retrieve)、更新(Update)和删除(Delete)几个单词的首字母简写。
+# 主要被用在描述软件系统中DataBase或者持久层的基本操作功能。
 
 async def get_user(user_id: int) -> Optional[User]:
     result = await orm.execute(select(User).filter(User.id == user_id).options(joinedload('*')))
@@ -51,6 +54,14 @@ async def update_user(user_id: int, user_update: UserUpdate) -> Optional[User]:
         await orm.update(User, data, [User.id == user_id])
         user = await get_user(user_id)
     return user
+
+# 更新登录时间
+async def update_login_time(user: User) -> None:
+    data = {
+        "login_count": user.login_count + 1,
+        "last_login": datetime.utcnow()
+    }
+    await orm.update(User, data, [User.id == user.id])
 
 async def delete_user(user_id: int) -> Optional[User]:
     user = await get_user(user_id)
