@@ -25,18 +25,16 @@ pip install pdm
 pdm install
 ``` 
 
+复制`.env.example`文件并重命名为`.env`，然后根据你的需求修改其中的配置。
+
 ## 运行
 
 你可以使用以下命令运行项目：
 
 ```bash
-pdm run start
+pdm run python main.py
 ```
 
 ## 贡献
 
 欢迎任何形式的贡献。如果你发现了任何问题，或者有任何改进的建议，欢迎提交 issue 或 pull request。
-
-## 许可证
-
-此项目遵循 MIT 许可证。详情请参见 [LICENSE](LICENSE) 文件。
