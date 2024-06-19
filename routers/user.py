@@ -227,7 +227,7 @@ async def read_users(skip: int = 0, limit: int = 10, current_user: schemas.User 
 
     返回用户列表。
     """
-    SystemLogger.debug(SystemLogger.User, f"管理员 {current_user.username} 请求获取用户列表。")
+    SystemLogger.debug(SystemLogger.UserAction, f"管理员 {current_user.username} 请求获取用户列表。")
     return await crud.get_users(skip=skip, limit=limit)
 
 
@@ -251,7 +251,7 @@ async def read_user(user_id: int, current_user: schemas.User = Depends(get_curre
 
     如果用户存在，返回用户的信息。如果用户不存在，返回 404 错误。
     """
-    SystemLogger.debug(SystemLogger.User, f"管理员 {current_user.username} 请求获取用户 {user_id} 的信息。")
+    SystemLogger.debug(SystemLogger.UserAction, f"管理员 {current_user.username} 请求获取用户 {user_id} 的信息。")
     user = await crud.get_user(user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -319,5 +319,5 @@ async def delete_user(user_id: int, current_user: schemas.User = Depends(get_cur
         raise HTTPException(status_code=403, detail="Only the admin user can delete other administrators")
     if user.is_admin and user.username == "admin":
         raise HTTPException(status_code=403, detail="Cannot delete admin user")
-    SystemLogger.debug(SystemLogger.User, f"管理员 {current_user.username} 请求删除用户 {user_id} 的信息。")
+    SystemLogger.debug(SystemLogger.UserAction, f"管理员 {current_user.username} 请求删除用户 {user_id} 的信息。")
     return await crud.delete_user(user_id)
