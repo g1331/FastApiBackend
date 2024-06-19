@@ -8,6 +8,7 @@ class SystemLogger:
     AuthLogger = "Authentication"
     UserAction = "UserAction"
     SystemAction = "SystemAction"
+    Mail = "Mail"
 
     @staticmethod
     def info(logger_name, message):
