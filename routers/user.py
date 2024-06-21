@@ -1,4 +1,5 @@
 import random
+import re
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,7 +20,7 @@ userRoute = APIRouter(
 )
 
 
-def validate_password(password: str):
+def validate_password(password: str) -> bool:
     """
     验证密码是否符合条件。
 
@@ -42,6 +43,44 @@ def validate_password(password: str):
     if not any(char.islower() for char in password):
         return False
     return True
+
+
+def validate_username(username: str) -> bool:
+    """
+    验证用户名是否符合条件。
+
+    此函数验证用户名是否符合以下条件：
+
+    1. 长度在4到15个字符之间。
+    2. 仅包含中英文、数字、下划线。
+    3. 如果包含中文字符，则不必包含英文或数字。
+    4. 如果不包含中文字符，则必须同时包含英文和数字。
+
+    **参数**:
+
+    - username (str): 需要验证的用户名。
+
+    **返回**:
+
+    - bool: 如果用户名符合条件，返回True，否则返回False。
+    """
+    # 用户名长度校验
+    if not (4 <= len(username) <= 15):
+        return False
+
+    # 特殊字符校验（仅允许中英文、数字、下划线）
+    if not re.match(r'^[\u4e00-\u9fa5_a-zA-Z0-9]+$', username):
+        return False
+
+    # 包含中文字符的情况
+    if re.search(r'[\u4e00-\u9fa5]', username):
+        return True
+
+    # 不包含中文字符的情况，必须同时包含英文和数字
+    if re.search(r'[a-zA-Z]', username) and re.search(r'[0-9]', username):
+        return True
+
+    return False
 
 
 @userRoute.post("/register", dependencies=[Depends(get_rate_limiter(max_calls=3, time_span=1))])
@@ -71,6 +110,13 @@ async def request_verification(
 
     如果注册信息有效，系统将会向用户的邮箱发送一个验证码，并返回一个消息："验证码已发送至您的邮箱。"
     """
+    # 检查用户名是否符合条件
+    if not validate_username(user.username):
+        raise HTTPException(
+            status_code=400,
+            detail="用户名长度必须在 4~15 之间，且仅包含中英文和数字。"
+        )
+
     # 检查用户名是否已存在
     existing_user = await crud.get_user_by_username(user.username)
     if existing_user:
@@ -78,8 +124,10 @@ async def request_verification(
 
     # 检查密码是否符合条件
     if not validate_password(user.password):
-        raise HTTPException(status_code=400,
-                            detail="密码长度必须在 8~20 之间，且至少包含一个大写字母、一个小写字母和一个数字。")
+        raise HTTPException(
+            status_code=400,
+            detail="密码长度必须在 8~20 之间，且至少包含一个大写字母、一个小写字母和一个数字。"
+        )
 
     # 在发送之前，检查 register_tokens 中是否存在验证码的哈希值
     if captcha_token not in captcha_tokens:
@@ -173,6 +221,7 @@ async def verify_and_create(
         return {
             "message": "用户注册成功。",
             "user": {
+                "id": new_user.id,
                 "username": new_user.username,
                 "email": new_user.email,
                 "is_active": new_user.is_active,

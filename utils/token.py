@@ -5,10 +5,12 @@ from typing import Optional
 from jose import jwt
 from passlib.context import CryptContext
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRATION_MINUTES", 60))
-REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_EXPIRATION_DAYS", 7))
+from config import global_config
+
+JWT_SECRET_KEY = global_config.jwt.secret_key
+ALGORITHM = global_config.jwt.algorithm
+ACCESS_TOKEN_EXPIRE_MINUTES = global_config.jwt.expiration_minutes
+REFRESH_TOKEN_EXPIRE_DAYS = global_config.jwt.refresh_expiration_days
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

@@ -5,6 +5,8 @@ from typing import Union
 from dotenv import load_dotenv
 from fastapi_mail import FastMail, ConnectionConfig
 
+from config import global_config
+
 load_dotenv()  # 加载.env文件中的环境变量
 
 
@@ -22,18 +24,18 @@ class VerificationCodeCache:
     """
     # 从环境变量读取配置
     mailboxConfiguration = ConnectionConfig(
-        MAIL_USERNAME=os.getenv("MAIL_USERNAME", "default-username@example.com"),
-        MAIL_PASSWORD=os.getenv("MAIL_PASSWORD", "default-password"),
-        MAIL_FROM=os.getenv("MAIL_FROM", "your-email@example.com"),
-        MAIL_FROM_NAME=os.getenv("MAIL_FROM_NAME", "Your Name"),
-        MAIL_PORT=int(os.getenv("MAIL_PORT", 587)),
-        MAIL_SERVER=os.getenv("MAIL_SERVER", "smtp.example.com"),
-        MAIL_STARTTLS=os.getenv("MAIL_STARTTLS", "True").lower() in ['true', '1', 't', 'y', 'yes'],
-        MAIL_SSL_TLS=os.getenv("MAIL_SSL_TLS", "False").lower() in ['true', '1', 't', 'y', 'yes'],
+        MAIL_USERNAME=global_config.email.username,
+        MAIL_PASSWORD=global_config.email.password,
+        MAIL_FROM=global_config.email.from_address,
+        MAIL_FROM_NAME=global_config.email.username,
+        MAIL_PORT=global_config.email.port,
+        MAIL_SERVER=global_config.email.server,
+        MAIL_STARTTLS=global_config.email.starttls,
+        MAIL_SSL_TLS=global_config.email.ssl_tls,
         USE_CREDENTIALS=True,
     )
 
-    def __init__(self, expiry_time=int(os.getenv("MAIL_EXPIRATION"))):
+    def __init__(self, expiry_time=global_config.email.expiration):
         self.codes = {}
         self.request_counts = {}  # 新增：存储每个邮箱地址的请求次数和最后一次请求的时间
         self.expiry_time = expiry_time

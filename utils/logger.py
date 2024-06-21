@@ -28,6 +28,7 @@ class SystemLogger(logging.Handler):
     UserAction = "UserAction"
     SystemAction = "SystemAction"
     Mail = "Mail"
+    Config = "Config"
 
     @staticmethod
     def info(logger_name, message):

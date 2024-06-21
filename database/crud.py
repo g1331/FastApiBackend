@@ -22,14 +22,26 @@ async def get_user_by_username(username: str) -> Optional[User]:
     user = result.scalars().first()
     return user
 
-async def create_user(user: UserCreate, is_admin: bool = False) -> User:
-    hashed_password = get_password_hash(user.password)
+async def get_user_by_github_id(github_id: int) -> Optional[User]:
+    result = await orm.execute(select(User).filter(User.github_id == github_id).options(joinedload('*')))
+    user = result.scalars().first()
+    return user
+
+async def create_user(
+        user: UserCreate,
+        is_admin: bool = False,
+        is_third_party: bool = False,
+        github_id: int = None
+) -> User:
+    hashed_password = None if is_third_party else get_password_hash(user.password)
     data = {
         "username": user.username,
         "hashed_password": hashed_password,
         "email": user.email,
+        "github_id": github_id,
         "is_active": True,
         "is_admin": is_admin,
+        "is_third_party": is_third_party,
         "avatar": None,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),

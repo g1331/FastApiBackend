@@ -9,8 +9,8 @@ class VerifyRequest(BaseModel):
 
 class UserBase(BaseModel):
     username: str = Field(
-        ..., min_length=3, max_length=50, title="用户名", description="用户名", examples=["g1331"])
-    email: EmailStr = Field(
+        ..., min_length=4, max_length=15, title="用户名", description="用户名", examples=["g1331"])
+    email: Optional[EmailStr] = Field(
         ..., title="邮箱", description="邮箱", examples=["test@test.com"])
 
 
@@ -18,7 +18,7 @@ class UserCreate(UserBase):
     """
     注册用户
     """
-    password: str = Field(
+    password: Optional[str] = Field(
         ..., min_length=6, max_length=20, title="密码", description="密码", examples=["password"])
 
 class ResponseRequestVerification(BaseModel):
