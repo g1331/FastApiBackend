@@ -165,7 +165,7 @@ cython_debug/
 /test.db
 
 # Alembic migration scripts
-alembic/versions/
+alembic/
 
 # Alembic configuration files
 alembic.ini
