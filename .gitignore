@@ -163,3 +163,9 @@ cython_debug/
 
 # 测试用的数据库
 /test.db
+
+# Alembic migration scripts
+alembic/versions/
+
+# Alembic configuration files
+alembic.ini

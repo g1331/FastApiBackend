@@ -6,6 +6,8 @@ from sqlalchemy import MetaData, inspect, delete, update, select, insert, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+from config import global_config
+
 
 class AsyncORM:
     """对象关系映射（Object Relational Mapping）"""
@@ -304,5 +306,4 @@ class AsyncORM:
 
 
 # 初始化 ORM 实例
-db_link = f"sqlite+aiosqlite:///./{os.getenv('DB_NAME')}.db"
-orm = AsyncORM(db_link)
+orm = AsyncORM(global_config.database.get_connection_string())
