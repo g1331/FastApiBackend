@@ -2,14 +2,14 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
-import schemas
+import schemas.user
 from database import crud
 from utils.token import JWT_SECRET_KEY, ALGORITHM
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="v1/tokens")
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> schemas.User:
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> schemas.user.User:
     """
     获取当前用户。
 
@@ -40,7 +40,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> schemas.User:
         raise credentials_exception
     return user
 
-async def get_active_user(current_user: schemas.User = Depends(get_current_user)) -> schemas.User:
+async def get_active_user(current_user: schemas.user.User = Depends(get_current_user)) -> schemas.user.User:
     """
     获取当前已激活的用户。
 
@@ -55,10 +55,10 @@ async def get_active_user(current_user: schemas.User = Depends(get_current_user)
     返回当前已激活的用户。
     """
     if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="已禁用的用户")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="已禁用的用户")
     return current_user
 
-async def get_current_active_user(current_user: schemas.User = Depends(get_active_user)) -> schemas.User:
+async def get_current_active_user(current_user: schemas.user.User = Depends(get_active_user)) -> schemas.user.User:
     """
     获取当前已激活的用户。
 
@@ -74,7 +74,7 @@ async def get_current_active_user(current_user: schemas.User = Depends(get_activ
     """
     return current_user
 
-async def get_current_active_admin(current_user: schemas.User = Depends(get_active_user)) -> schemas.User:
+async def get_current_active_admin(current_user: schemas.user.User = Depends(get_active_user)) -> schemas.user.User:
     """
     获取当前已激活的管理员。
 
@@ -89,5 +89,5 @@ async def get_current_active_admin(current_user: schemas.User = Depends(get_acti
     返回当前已激活的管理员。
     """
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="权限不足！只有管理员可以访问此接口")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足！只有管理员可以访问此接口")
     return current_user

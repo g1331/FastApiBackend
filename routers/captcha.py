@@ -8,13 +8,20 @@ from captcha.image import ImageCaptcha
 from fastapi import HTTPException, Form, APIRouter, Depends
 from starlette import status
 from starlette.requests import Request
-from starlette.responses import StreamingResponse
+from starlette.responses import StreamingResponse, JSONResponse
+
+import schemas.captcha
 from utils.request_limit import get_rate_limiter
 
 captchaRoute = APIRouter(
     prefix="/captcha",
     tags=["验证码"],
-    responses={404: {"description": "Not found"}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Not found",
+            "content": {"application/json": {"example": {"detail": "Not found"}}},
+        }
+    },
 )
 
 # 用于存储验证码的哈希值
@@ -32,6 +39,7 @@ def generate_captcha_text():
     返回一个包含4个字符的验证码文本。
     """
     return ''.join(random.choices('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', k=4))
+
 
 def remove_token(token: str):
     """
@@ -67,8 +75,21 @@ def hash_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-@captchaRoute.get("", dependencies=[Depends(get_rate_limiter(max_calls=10, time_span=1))])
-async def get_captcha(request: Request):
+@captchaRoute.get(
+    "",
+    dependencies=[Depends(get_rate_limiter(max_calls=10, time_span=1))],
+    responses={
+        status.HTTP_201_CREATED: {
+            "description": "验证码",
+            "content": {"image/png": {"example": "验证码图片"}}
+        },
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "请求过于频繁",
+            "content": {"application/json": {"example": {"detail": "请求过于频繁"}}},
+        }
+    }
+)
+async def get_captcha(request: Request) -> StreamingResponse:
     """
     生成验证码接口。
 
@@ -92,14 +113,28 @@ async def get_captcha(request: Request):
     data = image.generate(captcha_text)
     image_bytes = BytesIO(data.getvalue())
     request.session['captcha'] = hash_text(captcha_text)  # 将验证码文本的哈希值存储在会话中
-    return StreamingResponse(image_bytes, media_type="image/png")
+    return StreamingResponse(status_code=201, content=image_bytes, media_type="image/png")
 
 
-@captchaRoute.post("/verify", dependencies=[Depends(get_rate_limiter(max_calls=5, time_span=1))])
+@captchaRoute.post(
+    "/verify",
+    dependencies=[Depends(get_rate_limiter(max_calls=5, time_span=1))],
+    response_model=schemas.captcha.VerifyResponse,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "验证码错误",
+            "content": {"application/json": {"example": {"detail": "验证码错误"}}},
+        },
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "请求过于频繁",
+            "content": {"application/json": {"example": {"detail": "请求过于频繁"}}},
+        }
+    }
+)
 async def verify(
         request: Request,
         captcha: str = Form(...)
-) -> dict:
+) -> JSONResponse:
     """
     验证验证码接口。
 
@@ -122,6 +157,13 @@ async def verify(
         timer = threading.Timer(300, remove_token, args=[captcha_token])
         timer.start()
         del request.session['captcha']  # 验证成功后删除验证码
-        return {"status": "success", "code": status.HTTP_200_OK, "message": "验证成功！", "captcha_token": captcha_token}
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "code": status.HTTP_200_OK,
+                "message": "验证成功！",
+                "captcha_token": captcha_token
+            }
+        )
     else:
-        raise HTTPException(status_code=400, detail="验证码错误")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码错误")

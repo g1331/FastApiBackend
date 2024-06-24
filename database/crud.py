@@ -6,7 +6,7 @@ from sqlalchemy.orm import joinedload
 
 from database import orm
 from database.models.user import User
-from schemas import UserCreate, UserUpdate
+from schemas.user import UserCreate, UserUpdate
 from utils.token import get_password_hash, verify_password
 
 # CRUD是指在做计算处理时的增加(Create)、读取查询(Retrieve)、更新(Update)和删除(Delete)几个单词的首字母简写。
