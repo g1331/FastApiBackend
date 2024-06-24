@@ -4,8 +4,11 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi_mail import MessageSchema, FastMail
+from loguru import logger
+from starlette import status
+from starlette.responses import JSONResponse
 
-import schemas
+import schemas.user
 from database import crud
 from routers.captcha import captcha_tokens
 from utils.auth import get_current_active_admin, get_current_active_user
@@ -16,7 +19,12 @@ from utils.request_limit import get_rate_limiter
 userRoute = APIRouter(
     prefix="/users",
     tags=["用户"],
-    responses={404: {"description": "Not found"}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Not found",
+            "content": {"application/json": {"example": {"detail": "Not found"}}},
+        }
+    },
 )
 
 
@@ -83,12 +91,54 @@ def validate_username(username: str) -> bool:
     return False
 
 
-@userRoute.post("/register", dependencies=[Depends(get_rate_limiter(max_calls=3, time_span=1))])
+@userRoute.post(
+    "/register",
+    dependencies=[Depends(get_rate_limiter(max_calls=3, time_span=1))],
+    response_model=schemas.user.RegisterResponse,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Bad Request",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "无效用户名": {
+                            "detail": "用户名长度必须在 4~15 之间，且仅包含中英文和数字。"
+                        },
+                        "无效密码": {
+                            "detail": "密码长度必须在 8~20 之间，且至少包含一个大写字母、一个小写字母和一个数字。"
+                        },
+                        "无效验证码": {
+                            "detail": "验证码无效。"
+                        }
+                    }
+                }
+            },
+        },
+        status.HTTP_409_CONFLICT: {
+            "description": "Conflict",
+            "content": {
+                "application/json": {"example": {"detail": "此用户名已被注册！"}}
+            },
+        },
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "Too Many Requests",
+            "content": {
+                "application/json": {"example": {"detail": "验证码已发送，请检查您的邮箱。"}}
+            },
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {"example": {"detail": "验证码发送失败！"}}
+            },
+        },
+    }
+)
 async def request_verification(
-        user: schemas.UserCreate,
+        user: schemas.user.UserCreate,
         captcha_token: str,
         mail_service: FastMail = Depends(verification_cache.get_mail_client),
-) -> dict:
+) -> JSONResponse:
     """
     用户注册接口。
 
@@ -113,7 +163,7 @@ async def request_verification(
     # 检查用户名是否符合条件
     if not validate_username(user.username):
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="用户名长度必须在 4~15 之间，且仅包含中英文和数字。"
         )
 
@@ -125,20 +175,19 @@ async def request_verification(
     # 检查密码是否符合条件
     if not validate_password(user.password):
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="密码长度必须在 8~20 之间，且至少包含一个大写字母、一个小写字母和一个数字。"
         )
 
     # 在发送之前，检查 register_tokens 中是否存在验证码的哈希值
     if captcha_token not in captcha_tokens:
-        raise HTTPException(status_code=400, detail="验证码无效。")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码无效。")
     # 删除缓存
     captcha_tokens.pop(captcha_token, None)
 
     # 检查是否已经发送过验证码并且验证码还在有效期内
     if verification_cache.is_code_active(user.email):
-        raise HTTPException(
-            status_code=429, detail="验证码已发送，请检查您的邮箱。")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="验证码已发送，请检查您的邮箱。")
 
     # 发送验证码
     code = str(random.randint(100000, 999999))
@@ -165,20 +214,50 @@ async def request_verification(
         await mail_service.send_message(message)
     except Exception as e:
         # 打印异常的详细信息
-        SystemLogger.error(SystemLogger.Mail, f"无法发送验证码，服务器内部错误！详细信息：{e}")
-        raise HTTPException(status_code=500, detail="验证码发送失败！")
+        logger.error(SystemLogger.mail_msg(f"无法发送验证码，服务器内部错误！详细信息：{e}"))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="验证码发送失败！")
     else:
         # 在成功发送邮件后添加日志记录
-        SystemLogger.info(SystemLogger.Mail, f"验证码 {code} 已发送至 {user.email}")
+        logger.info(SystemLogger.mail_msg(f"验证码 {code} 已发送至 {user.email}"))
     verification_cache.set_code(user.email, code)
-    return {"message": "验证码已发送至您的邮箱。"}
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "验证码已发送至您的邮箱。"})
 
 
-@userRoute.post("/verify-and-create", dependencies=[Depends(get_rate_limiter(max_calls=3, time_span=1))])
+@userRoute.post(
+    "/verify-and-create",
+    dependencies=[Depends(get_rate_limiter(max_calls=3, time_span=1))],
+    response_model=schemas.user.VerifyResponse,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Bad Request",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "验证码已过期": {"detail": "验证码已过期。"},
+                        "验证码无效": {"detail": "验证码无效。"},
+                        "验证码错误": {"detail": "验证码错误。"}
+                    }
+                }
+            },
+        },
+        status.HTTP_409_CONFLICT: {
+            "description": "Conflict",
+            "content": {
+                "application/json": {"example": {"detail": "用户已被注册"}}
+            },
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {"example": {"detail": "User creation failed."}}
+            },
+        },
+    }
+)
 async def verify_and_create(
-        request: schemas.VerifyRequest,
-        user_data: schemas.UserCreate,
-) -> dict:
+        request: schemas.user.VerifyRequest,
+        user_data: schemas.user.UserCreate,
+) -> JSONResponse:
     """
     验证并创建用户接口。
 
@@ -204,37 +283,51 @@ async def verify_and_create(
     """
     stored_code = verification_cache.get_code(request.email)
     if stored_code == "EXPIRED":
-        raise HTTPException(status_code=400, detail="验证码已过期。")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码已过期。")
     elif stored_code is None:
-        raise HTTPException(status_code=400, detail="验证码无效。")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码无效。")
     elif stored_code == request.code:
         # 防止反复创建
         existing_user = await crud.get_user_by_username(user_data.username)
         if existing_user:
-            raise HTTPException(status_code=400, detail="用户已被注册")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户已被注册")
         # 验证成功，调用 create_user 创建新用户
         new_user = await crud.create_user(user_data)
         if new_user is None:
-            raise HTTPException(status_code=500, detail="User creation failed.")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="User creation failed.")
         # 删除验证码
         verification_cache.delete_code(request.email)
-        return {
-            "message": "用户注册成功。",
-            "user": {
-                "id": new_user.id,
-                "username": new_user.username,
-                "email": new_user.email,
-                "is_active": new_user.is_active,
-                "is_admin": new_user.is_admin,
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content={
+                "message": "用户注册成功。",
+                "user": {
+                    "id": new_user.id,
+                    "username": new_user.username,
+                    "email": new_user.email,
+                    "is_active": new_user.is_active,
+                    "is_admin": new_user.is_admin,
+                }
             }
-        }
+        )
     else:
         verification_cache.delete_code(user_data.email)
-        raise HTTPException(status_code=400, detail="验证码错误。")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码错误。")
 
 
-@userRoute.get("/me", response_model=schemas.User)
-async def read_users_me(current_user: schemas.User = Depends(get_current_active_user)):
+@userRoute.get(
+    "/me",
+    response_model=schemas.user.User,
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": "Forbidden",
+            "content": {
+                "application/json": {"example": {"detail": "已禁用的用户"}}
+            }
+        }
+    }
+)
+async def read_users_me(current_user: schemas.user.User = Depends(get_current_active_user)):
     """
     获取当前活跃用户的接口。
 
@@ -255,8 +348,22 @@ async def read_users_me(current_user: schemas.User = Depends(get_current_active_
     return current_user
 
 
-@userRoute.get("", response_model=List[schemas.User])
-async def read_users(skip: int = 0, limit: int = 10, current_user: schemas.User = Depends(get_current_active_admin)):
+@userRoute.get(
+    "",
+    response_model=List[schemas.user.User],
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": "Forbidden",
+            "content": {
+                "application/json": {"example": {"detail": "权限不足！只有管理员可以访问此接口"}}
+            }
+        }
+    }
+)
+async def read_users(
+        skip: int = 0, limit: int = 10,
+        current_user: schemas.user.User = Depends(get_current_active_admin)
+):
     """
     获取用户列表接口。
 
@@ -276,12 +383,27 @@ async def read_users(skip: int = 0, limit: int = 10, current_user: schemas.User 
 
     返回用户列表。
     """
-    SystemLogger.debug(SystemLogger.UserAction, f"管理员 {current_user.username} 请求获取用户列表。")
+    logger.debug(SystemLogger.user_action_msg(f"管理员 {current_user.username} 请求获取用户列表。"))
     return await crud.get_users(skip=skip, limit=limit)
 
 
-@userRoute.get("/{user_id}", response_model=schemas.User)
-async def read_user(user_id: int, current_user: schemas.User = Depends(get_current_active_admin)):
+@userRoute.get(
+    "/{user_id}",
+    response_model=schemas.user.User,
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": "Forbidden",
+            "content": {
+                "application/json": {"example": {"detail": "权限不足！只有管理员可以访问此接口"}}
+            }
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Not Found",
+            "content": {"application/json": {"example": {"detail": "User not found"}}}
+        }
+    }
+)
+async def read_user(user_id: int, current_user: schemas.user.User = Depends(get_current_active_admin)):
     """
     获取特定用户接口。
 
@@ -300,17 +422,38 @@ async def read_user(user_id: int, current_user: schemas.User = Depends(get_curre
 
     如果用户存在，返回用户的信息。如果用户不存在，返回 404 错误。
     """
-    SystemLogger.debug(SystemLogger.UserAction, f"管理员 {current_user.username} 请求获取用户 {user_id} 的信息。")
+    logger.debug(SystemLogger.user_action_msg(f"管理员 {current_user.username} 请求获取用户 {user_id} 的信息。"))
     user = await crud.get_user(user_id)
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
 
-@userRoute.put("/{user_id}", response_model=schemas.User)
+@userRoute.put(
+    "/{user_id}",
+    response_model=schemas.user.User,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Bad Request",
+            "content": {"application/json": {"example": {"detail": "Inactive user"}}}
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "description": "Forbidden",
+            "content": {
+                "application/json": {"example": {
+                    "detail": "Cannot change the username of the admin user"
+                }}
+            }
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Not Found",
+            "content": {"application/json": {"example": {"detail": "User not found"}}}
+        }
+    }
+)
 async def update_user(
-        user_id: int, user_update: schemas.UserUpdate,
-        current_user: schemas.User = Depends(get_current_active_admin)
+        user_id: int, user_update: schemas.user.UserUpdate,
+        current_user: schemas.user.User = Depends(get_current_active_admin)
 ):
     """
     更新用户接口。
@@ -332,17 +475,33 @@ async def update_user(
     如果用户存在，返回更新后的用户信息。如果用户不存在，返回 404 错误。
     """
     if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
     user = await crud.get_user(user_id)
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     if user.username == "admin" and user_update.username != "admin":
-        raise HTTPException(status_code=403, detail="Cannot change the username of the admin user")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Cannot change the username of the admin user")
     return await crud.update_user(user_id, user_update)
 
 
-@userRoute.delete("/{user_id}", response_model=schemas.User)
-async def delete_user(user_id: int, current_user: schemas.User = Depends(get_current_active_admin)):
+@userRoute.delete(
+    "/{user_id}",
+    response_model=schemas.user.User,
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": "Forbidden",
+            "content": {
+                "application/json": {"example": {"detail": "Only the admin user can delete other administrators"}}
+            }
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Not Found",
+            "content": {"application/json": {"example": {"detail": "User not found"}}}
+        }
+    }
+)
+async def delete_user(user_id: int, current_user: schemas.user.User = Depends(get_current_active_admin)):
     """
     删除用户接口。
 
@@ -363,10 +522,13 @@ async def delete_user(user_id: int, current_user: schemas.User = Depends(get_cur
     """
     user = await crud.get_user(user_id)
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     if user.is_admin and user.username != "admin":
-        raise HTTPException(status_code=403, detail="Only the admin user can delete other administrators")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the admin user can delete other administrators"
+        )
     if user.is_admin and user.username == "admin":
-        raise HTTPException(status_code=403, detail="Cannot delete admin user")
-    SystemLogger.debug(SystemLogger.UserAction, f"管理员 {current_user.username} 请求删除用户 {user_id} 的信息。")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete admin user")
+    logger.debug(SystemLogger.user_action_msg(f"管理员 {current_user.username} 请求删除用户 {user_id} 的信息。"))
     return await crud.delete_user(user_id)

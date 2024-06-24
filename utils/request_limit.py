@@ -1,5 +1,3 @@
-# utils/request_limit.py
-import os
 from datetime import datetime, timedelta
 from typing import Dict
 
@@ -11,7 +9,7 @@ from config import global_config
 client_call_times: Dict[str, Dict] = {}
 
 
-async def check_call_frequency(request: Request, max_calls: int, time_span: int):
+async def check_call_frequency(request: Request, max_calls: int, time_span: int) -> None:
     """
     检查客户端的调用频率。
 
@@ -44,7 +42,7 @@ async def check_call_frequency(request: Request, max_calls: int, time_span: int)
         client_call_times[key] = {'time': datetime.now(), 'count': 1}
 
 
-def get_rate_limiter(max_calls: int = 30, time_span: int = 1):
+def get_rate_limiter(max_calls: int = 30, time_span: int = 1) -> callable:
     """
     获取速率限制器。
 

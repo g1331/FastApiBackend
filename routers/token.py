@@ -1,27 +1,42 @@
 from datetime import timedelta
-from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
+from loguru import logger
 from starlette import status
 from starlette.requests import Request
 
-import schemas
+import schemas.token
 from database import crud
-from utils.token import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, create_refresh_token
 from utils.logger import SystemLogger
 from utils.request_limit import get_rate_limiter
+from utils.token import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, create_refresh_token
 
 tokenRoute = APIRouter(
     prefix="/tokens",
     tags=["令牌"],
-    responses={404: {"description": "Not found"}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Not found",
+            "content": {"application/json": {"example": {"detail": "Not found"}}},
+        }
+    },
 )
 
 
 @tokenRoute.post(
     "",
-    response_model=Dict[str, str],
+    response_model=schemas.token.TokenResponse,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "登录信息错误",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "登录信息错误", "headers": {"WWW-Authenticate": "Bearer"}}
+                }
+            },
+        }
+    },
     dependencies=[Depends(get_rate_limiter(max_calls=3, time_span=1))]
 )
 async def login_for_access_token(
@@ -54,17 +69,27 @@ async def login_for_access_token(
     access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
     refresh_token = create_refresh_token(data={"sub": user.username})
     client_ip = request.client.host  # 获取客户端的IP地址
-    SystemLogger.info(
-        SystemLogger.UserAction,
-        f"User {user.username} logged in，IP: {client_ip}"  # 在日志中记录IP地址
-    )
+    logger.info(SystemLogger.user_action_msg(f"User {user.username} logged in，IP: {client_ip}"))  # 在日志中记录IP地址
     # 数据库记录登录时间
     await crud.update_login_time(user)
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 
-@tokenRoute.post("/refresh", response_model=Dict[str, str])
-async def refresh_access_token(token_request: schemas.TokenRequest):
+@tokenRoute.post(
+    "/refresh",
+    response_model=schemas.token.RefreshTokenResponse,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "无效的刷新令牌",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Invalid refresh token", "headers": {"WWW-Authenticate": "Bearer"}}
+                }
+            },
+        }
+    },
+)
+async def refresh_access_token(token_request: schemas.token.RefreshTokenRequest):
     """
     刷新访问令牌接口。
 

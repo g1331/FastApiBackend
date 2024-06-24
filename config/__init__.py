@@ -2,6 +2,7 @@ import os
 from typing import Type, Optional, TypeVar
 
 from dotenv import load_dotenv
+from loguru import logger
 
 from utils.logger import SystemLogger
 
@@ -15,7 +16,7 @@ class Config:
     def get_env_variable(name: str, type_: Type[T], default: Optional[T] = None) -> T:
         value = os.getenv(name)
         if value is None:
-            SystemLogger.warning(SystemLogger.Config, f"{name} is not set. Using default value: {default}")
+            logger.warning(SystemLogger.config_msg(f"{name} is not set. Using default value: {default}"))
             return default
         return type_(value)
 

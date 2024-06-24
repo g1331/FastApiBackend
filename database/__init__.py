@@ -1,4 +1,3 @@
-import os
 from asyncio import Lock
 
 from loguru import logger

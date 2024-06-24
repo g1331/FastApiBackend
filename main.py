@@ -1,5 +1,4 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -10,13 +9,14 @@ from sqlalchemy.exc import InternalError, ProgrammingError
 from starlette.middleware.sessions import SessionMiddleware
 
 import schemas
+import schemas.user
+from config import global_config
 from database import orm, crud
 from routers.captcha import captchaRoute
 from routers.oauth import oauthRoute
 from routers.token import tokenRoute
 from routers.user import userRoute
 from utils.logger import SystemLogger, LoguruHandler
-from config import global_config
 
 # 获取 FastAPI 的日志记录器
 uvicorn_logger = logging.getLogger("uvicorn")
@@ -45,9 +45,9 @@ async def lifespan(_app: FastAPI):
         import random
         import string
         admin_password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
-        admin_user = schemas.UserCreate(username="admin", password=admin_password, email="admin@test.com")
+        admin_user = schemas.user.UserCreate(username="admin", password=admin_password, email="admin@test.com")
         await crud.create_user(admin_user, is_admin=True)
-        SystemLogger.success(SystemLogger.DbLogger, f"Admin user created with password: {admin_password}")
+        logger.success(SystemLogger.db_msg(f"Admin user created with password: {admin_password}"))
 
     logger.info("Application started")
 

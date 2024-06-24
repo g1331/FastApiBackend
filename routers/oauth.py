@@ -5,9 +5,11 @@ from datetime import timedelta
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from starlette.responses import RedirectResponse
+from loguru import logger
+from starlette import status
+from starlette.responses import RedirectResponse, JSONResponse
 
-import schemas
+import schemas.user
 from config import global_config
 from database import crud
 from utils.logger import SystemLogger
@@ -16,7 +18,12 @@ from utils.token import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, create
 oauthRoute = APIRouter(
     prefix="/oauth",
     tags=["OAuth"],
-    responses={404: {"description": "Not found"}},
+    responses={
+        404: {
+            "description": "Not found",
+            "content": {"application/json": {"example": {"detail": "Not found"}}},
+        }
+    },
 )
 
 GITHUB_CLIENT_ID = global_config.oauth.github_client_id
@@ -25,7 +32,7 @@ GITHUB_CLIENT_SECRET = global_config.oauth.github_client_secret
 
 # NOTE: 使用github登录，访问oauth重定向到github登录页面
 @oauthRoute.get("")
-async def github_login():
+async def github_login() -> RedirectResponse:
     """
     GitHub OAuth登录接口。
 
@@ -38,11 +45,41 @@ async def github_login():
     return RedirectResponse(
         url=f"https://github.com/login/oauth/authorize?client_id={GITHUB_CLIENT_ID}"
             f"&redirect_uri=http://{os.getenv('APP_HOST')}:{os.getenv('app_port')}/v1/oauth/redirect"
+        # TODO 生产环境应该修改为域名配置，需要在config里添加，或者其他方式，也可直接参数返回
     )
 
 
 # NOTE: github登录成功后，github会重定向到这个地址
-@oauthRoute.get("/redirect")
+@oauthRoute.get(
+    "/redirect",
+    response_model=schemas.user.GithubLoginResponse,
+    responses={
+        status.HTTP_200_OK: {
+            "description": "登录成功",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "登录成功",
+                        "user": {
+                            "id": 1,
+                            "username": "user",
+                            "email": "user@mail.com",
+                            "is_active": True,
+                            "is_admin": False,
+                        },
+                        "tokens": {
+                            "access_token": "access_token",
+                            "refresh_token": "refresh_token",
+                            "token_type": "Bearer"
+                        }
+                    }
+                }
+            }
+        },
+        status.HTTP_400_BAD_REQUEST: {"description": "GitHub OAuth失败"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "无法获取用户信息"}
+    }
+)
 async def github_redirect(code: str):
     """
     GitHub OAuth重定向接口。
@@ -70,13 +107,13 @@ async def github_redirect(code: str):
         )
 
     if response.json().get("error"):
-        raise HTTPException(status_code=400, detail="GitHub OAuth failed.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="GitHub OAuth failed.")
 
     try:
         #  获取access_token
         access_token = response.json().get("access_token")
         if not access_token:
-            raise HTTPException(status_code=400, detail="GitHub OAuth failed.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="GitHub OAuth failed.")
         #  请求用户信息
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -85,8 +122,8 @@ async def github_redirect(code: str):
             )
         user_info = response.json()
     except Exception as e:
-        SystemLogger.error(SystemLogger.AuthLogger, f"无法获取用户信息，详细信息：{e}")
-        raise HTTPException(status_code=500, detail="无法获取用户信息。")
+        logger.error(SystemLogger.auth_msg(f"无法获取用户信息，详细信息：{e}"))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="无法获取用户信息。")
 
     # 1. 如果未注册，自动注册
     # 提取用户信息进行注册
@@ -115,36 +152,40 @@ async def github_redirect(code: str):
         # 数据库记录登录时间
         user_base = await crud.get_user_by_username(existing_user.username)
         await crud.update_login_time(user_base)
-        return {
-            "message": "登录成功",
-            "user": {
-                "id": existing_user.id,
-                "username": existing_user.username,
-                "email": existing_user.email,
-                "is_active": existing_user.is_active,
-                "is_admin": existing_user.is_admin,
-            },
-            "tokens": {
-                "access_token": access_token,
-                "refresh_token": refresh_token
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "登录成功",
+                "user": {
+                    "id": existing_user.id,
+                    "username": existing_user.username,
+                    "email": existing_user.email,
+                    "is_active": existing_user.is_active,
+                    "is_admin": existing_user.is_admin,
+                },
+                "tokens": {
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "token_type": "Bearer"
+                }
             }
-        }
+        )
 
     # 如果用户不存在，创建新用户
     try:
-        user_data: schemas.UserCreate = schemas.UserCreate(
+        user_data: schemas.user.UserCreate = schemas.user.UserCreate(
             username=user_name,
             password=None,
             email=user_email,
         )
         new_user = await crud.create_user(user_data, is_third_party=True, github_id=user_github_id)
-        SystemLogger.success(SystemLogger.AuthLogger, f"创建新用户 {user_name} 成功。")
+        logger.success(SystemLogger.auth_msg(f"创建新用户 {user_name} 成功。"))
     except Exception as e:
-        SystemLogger.error(SystemLogger.AuthLogger, f"无法创建用户数据，详细信息：{e}")
-        raise HTTPException(status_code=500, detail="用户数据创建失败。")
+        logger.error(SystemLogger.auth_msg(f"无法创建用户数据，详细信息：{e}"))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="用户数据创建失败。")
 
     if new_user is None:
-        raise HTTPException(status_code=500, detail="User creation failed.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="User creation failed.")
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(data={"sub": user_data.username}, expires_delta=access_token_expires)
@@ -153,17 +194,21 @@ async def github_redirect(code: str):
     user_base = await crud.get_user_by_username(user_data.username)
     await crud.update_login_time(user_base)
 
-    return {
-        "message": "用户注册成功。",
-        "user": {
-            "id": new_user.id,
-            "username": new_user.username,
-            "email": new_user.email,
-            "is_active": new_user.is_active,
-            "is_admin": new_user.is_admin,
-        },
-        "tokens": {
-            "access_token": access_token,
-            "refresh_token": refresh_token
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "message": "登录成功",
+            "user": {
+                "id": new_user.id,
+                "username": new_user.username,
+                "email": new_user.email,
+                "is_active": new_user.is_active,
+                "is_admin": new_user.is_admin,
+            },
+            "tokens": {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "Bearer"
+            }
         }
-    }
+    )

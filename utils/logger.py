@@ -31,36 +31,32 @@ class SystemLogger(logging.Handler):
     Config = "Config"
 
     @staticmethod
-    def info(logger_name, message):
-        logger.info(f"|{logger_name}| {message}")
+    def api_msg(msg: str):
+        return f"|{SystemLogger.APILogger}| {msg}"
 
     @staticmethod
-    def debug(logger_name, message):
-        logger.debug(f"|{logger_name}| {message}")
+    def db_msg(msg: str):
+        return f"|{SystemLogger.DbLogger}| {msg}"
 
     @staticmethod
-    def error(logger_name, message):
-        logger.error(f"|{logger_name}| {message}")
+    def auth_msg(msg: str):
+        return f"|{SystemLogger.AuthLogger}| {msg}"
 
     @staticmethod
-    def warning(logger_name, message):
-        logger.warning(f"|{logger_name}| {message}")
+    def user_action_msg(msg: str):
+        return f"|{SystemLogger.UserAction}| {msg}"
 
     @staticmethod
-    def success(logger_name, message):
-        logger.success(f"|{logger_name}| {message}")
+    def system_action_msg(msg: str):
+        return f"|{SystemLogger.SystemAction}| {msg}"
 
     @staticmethod
-    def exception(logger_name, message):
-        logger.exception(f"|{logger_name}| {message}")
+    def mail_msg(msg: str):
+        return f"|{SystemLogger.Mail}| {msg}"
 
     @staticmethod
-    def critical(logger_name, message):
-        logger.critical(f"|{logger_name}| {message}")
-
-    @staticmethod
-    def log(logger_name, level, message):
-        logger.log(level, f"| {logger_name}| {message}")
+    def config_msg(msg: str):
+        return f"|{SystemLogger.Config}| {msg}"
 
 
 SystemLogger = SystemLogger()
