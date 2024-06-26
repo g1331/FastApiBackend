@@ -3,8 +3,6 @@ from typing import Dict
 
 from fastapi import HTTPException, status, Request
 
-from config import global_config
-
 # 存储客户端的最后调用时间和请求次数
 client_call_times: Dict[str, Dict] = {}
 
@@ -20,9 +18,6 @@ async def check_call_frequency(request: Request, max_calls: int, time_span: int)
         - max_calls: 指定时间跨度内的最大调用次数。
         - time_span: 时间跨度（以分钟为单位）。
     """
-    # 如果处于调试模式，不进行频率限制
-    if global_config.app.debug_mode:
-        return
 
     client_ip = request.client.host
     route_path = request.url.path  # 获取请求的路由路径

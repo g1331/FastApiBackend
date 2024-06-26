@@ -130,12 +130,29 @@ class Config:
             self.github_client_secret: str = Config.get_env_variable(
                 "GITHUB_CLIENT_SECRET", str, "your-github-client-secret")
 
+    class Log:
+        """
+        # -----------------------
+        # 日志相关配置
+        # -----------------------
+        # 普通日志保存天数
+        COMMON_LOG_SAVE_DAYS=7
+        # 错误日志保存天数
+        ERROR_LOG_SAVE_DAYS=14
+        """
+
+        def __init__(self):
+            self.debug_log_save_days: int = Config.get_env_variable("DEBUG_LOG_SAVE_DAYS", int, 3)
+            self.common_log_save_days: int = Config.get_env_variable("COMMON_LOG_SAVE_DAYS", int, 7)
+            self.error_log_save_days: int = Config.get_env_variable("ERROR_LOG_SAVE_DAYS", int, 14)
+
     def __init__(self):
         self.app = self.App()
         self.database = self.Database()
         self.email = self.Email()
         self.jwt = self.Jwt()
         self.oauth = self.Oauth()
+        self.log = self.Log()
 
 
 global_config = Config()

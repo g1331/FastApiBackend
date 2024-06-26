@@ -169,3 +169,6 @@ alembic/
 
 # Alembic configuration files
 alembic.ini
+
+# 系统日志
+/logs

@@ -9,7 +9,7 @@ from loguru import logger
 from starlette import status
 from starlette.responses import RedirectResponse, JSONResponse
 
-import schemas.user
+import schemas
 from config import global_config
 from database import crud
 from utils.logger import SystemLogger

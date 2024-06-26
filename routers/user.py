@@ -8,7 +8,7 @@ from loguru import logger
 from starlette import status
 from starlette.responses import JSONResponse
 
-import schemas.user
+import schemas
 from database import crud
 from routers.captcha import captcha_tokens
 from utils.auth import get_current_active_admin, get_current_active_user
