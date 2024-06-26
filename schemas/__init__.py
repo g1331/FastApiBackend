@@ -23,3 +23,6 @@ Pydantic是一个数据验证和设置管理库，它使用Python的类型提示
 
 通过使用Pydantic模型继承自 `BaseModel`，FastAPI可以简化数据验证、解析和序列化过程，同时生成详细的API文档。这使得API的开发更加简洁、可靠和可维护。
 """
+from . import token
+from . import captcha
+from . import user

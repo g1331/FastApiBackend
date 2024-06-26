@@ -5,8 +5,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from loguru import logger
 from starlette import status
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 
-import schemas.token
+import schemas
 from database import crud
 from utils.logger import SystemLogger
 from utils.request_limit import get_rate_limiter
@@ -42,7 +43,7 @@ tokenRoute = APIRouter(
 async def login_for_access_token(
         request: Request,
         form_data: OAuth2PasswordRequestForm = Depends(),
-):
+) -> JSONResponse:
     """
     用户登录接口。
 
@@ -72,7 +73,10 @@ async def login_for_access_token(
     logger.info(SystemLogger.user_action_msg(f"User {user.username} logged in，IP: {client_ip}"))  # 在日志中记录IP地址
     # 数据库记录登录时间
     await crud.update_login_time(user)
-    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+    )
 
 
 @tokenRoute.post(
@@ -89,7 +93,7 @@ async def login_for_access_token(
         }
     },
 )
-async def refresh_access_token(token_request: schemas.token.RefreshTokenRequest):
+async def refresh_access_token(token_request: schemas.token.RefreshTokenRequest) -> JSONResponse:
     """
     刷新访问令牌接口。
 
@@ -113,4 +117,7 @@ async def refresh_access_token(token_request: schemas.token.RefreshTokenRequest)
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
     refresh_token = create_refresh_token(data={"sub": user.username})  # 创建新的 Refresh Token
-    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+    )

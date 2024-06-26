@@ -1,4 +1,3 @@
-import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -9,7 +8,6 @@ from sqlalchemy.exc import InternalError, ProgrammingError
 from starlette.middleware.sessions import SessionMiddleware
 
 import schemas
-import schemas.user
 from config import global_config
 from database import orm, crud
 from routers.captcha import captchaRoute
@@ -18,12 +16,9 @@ from routers.token import tokenRoute
 from routers.user import userRoute
 from utils.logger import SystemLogger, LoguruHandler
 
-# 获取 FastAPI 的日志记录器
-uvicorn_logger = logging.getLogger("uvicorn")
-# 清空 FastAPI 日志记录器的处理器
-uvicorn_logger.handlers = []
-# 添加 Loguru 处理器到 FastAPI 日志记录器
-uvicorn_logger.addHandler(LoguruHandler())
+# 配置日志
+system_logger = SystemLogger(global_config)
+LoguruHandler.handle_uvicorn_log()
 
 
 @asynccontextmanager
@@ -49,7 +44,7 @@ async def lifespan(_app: FastAPI):
         await crud.create_user(admin_user, is_admin=True)
         logger.success(SystemLogger.db_msg(f"Admin user created with password: {admin_password}"))
 
-    logger.info("Application started")
+    logger.success("Application started")
 
     yield  # 在这里分隔启动和关闭事件
 
@@ -86,4 +81,8 @@ def start_server():
 
 
 if __name__ == "__main__":
-    start_server()
+    try:
+        logger.info("Application starting")
+        start_server()
+    except KeyboardInterrupt:
+        logger.info("Application stopped")

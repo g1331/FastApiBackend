@@ -10,7 +10,7 @@ from starlette import status
 from starlette.requests import Request
 from starlette.responses import StreamingResponse, JSONResponse
 
-import schemas.captcha
+import schemas
 from utils.request_limit import get_rate_limiter
 
 captchaRoute = APIRouter(

@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
-import schemas.user
+import schemas
 from database import crud
 from utils.token import JWT_SECRET_KEY, ALGORITHM
 
